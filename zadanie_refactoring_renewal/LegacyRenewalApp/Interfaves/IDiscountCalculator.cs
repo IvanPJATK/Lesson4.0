@@ -6,7 +6,8 @@ using System.Threading.Tasks;
 
 namespace LegacyRenewalApp.Interfaves
 {
-    internal interface IDiscountCalculator
+    public interface IDiscountCalculator
     {
+        public decimal CalculateDiscount(int customerId, string planCode, int seatCount);
     }
 }
