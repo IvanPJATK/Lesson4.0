@@ -1,4 +1,6 @@
+using LegacyRenewalApp.Helper;
 using LegacyRenewalApp.Interfaves;
+using LegacyRenewalApp.Repositories;
 using System;
 
 namespace LegacyRenewalApp
@@ -7,10 +9,16 @@ namespace LegacyRenewalApp
     {
         private readonly ICustomerRepository _customerRepository;
         private readonly ISubscriptionPlanRepository _planRepository;
-        public SubscriptionRenewalService(ICustomerRepository customerRepository, ISubscriptionPlanRepository planRepository)
+        private readonly RenewalServiceValidator _renewalServiceValidator;
+        private readonly BillingGatewayAdapter _billingGatewayAdapter = new BillingGatewayAdapter();
+        public SubscriptionRenewalService() : this(new CustomerRepository(), new SubscriptionPlanRepository(), new RenewalServiceValidator(), new BillingGatewayAdapter())
+        { }
+        public SubscriptionRenewalService(ICustomerRepository customerRepository, ISubscriptionPlanRepository planRepository, RenewalServiceValidator renewalServiceValidator, BillingGatewayAdapter billingGatewayAdapter)
         {
             _customerRepository = customerRepository;
             _planRepository = planRepository;
+            _renewalServiceValidator = renewalServiceValidator;
+            _billingGatewayAdapter = billingGatewayAdapter;
         }
         public RenewalInvoice CreateRenewalInvoice(
             int customerId,
@@ -20,25 +28,7 @@ namespace LegacyRenewalApp
             bool includePremiumSupport,
             bool useLoyaltyPoints)
         {
-            if (customerId <= 0)
-            {
-                throw new ArgumentException("Customer id must be positive");
-            }
-
-            if (string.IsNullOrWhiteSpace(planCode))
-            {
-                throw new ArgumentException("Plan code is required");
-            }
-
-            if (seatCount <= 0)
-            {
-                throw new ArgumentException("Seat count must be positive");
-            }
-
-            if (string.IsNullOrWhiteSpace(paymentMethod))
-            {
-                throw new ArgumentException("Payment method is required");
-            }
+            _renewalServiceValidator.Validate(customerId, planCode, seatCount, paymentMethod);
 
             string normalizedPlanCode = planCode.Trim().ToUpperInvariant();
             string normalizedPaymentMethod = paymentMethod.Trim().ToUpperInvariant();
@@ -207,7 +197,7 @@ namespace LegacyRenewalApp
                 GeneratedAt = DateTime.UtcNow
             };
 
-            LegacyBillingGateway.SaveInvoice(invoice);
+            _billingGatewayAdapter.SaveInvoice(invoice);
 
             if (!string.IsNullOrWhiteSpace(customer.Email))
             {
