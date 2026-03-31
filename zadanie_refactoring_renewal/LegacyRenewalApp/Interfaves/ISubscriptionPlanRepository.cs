@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace LegacyRenewalApp.Interfaves
 {
-    public interface ISubscriptionPlanRepostirory
+    public interface ISubscriptionPlanRepository
     {
         SubscriptionPlan GetByCode(string code);
     }
