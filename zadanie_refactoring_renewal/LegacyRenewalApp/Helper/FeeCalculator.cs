@@ -3,11 +3,12 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using LegacyRenewalApp.Interfaves;
 using LegacyRenewalApp.Models;
 
 namespace LegacyRenewalApp.Helper
 {
-    public class FeeCalculator
+    public class FeeCalculator : IFeeCalculator
     {
         public FeeCalculatorResult CalculateFees(bool includePremiumSupport, string normalizedPlanCode, string normalizedPaymentMethod, decimal subtotalAfterDiscount)
         {

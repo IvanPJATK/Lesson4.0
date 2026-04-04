@@ -9,6 +9,6 @@ namespace LegacyRenewalApp.Interfaves
 {
     public interface IFeeCalculator
     {
-        public FeeCalculatorResult CalculateFees(string normalizedPlanCode, string normalizedPaymentMethod, decimal subtotalAfterDiscount);
+        public FeeCalculatorResult CalculateFees(bool includePremiumSupport, string normalizedPlanCode, string normalizedPaymentMethod, decimal subtotalAfterDiscount);
     }
 }

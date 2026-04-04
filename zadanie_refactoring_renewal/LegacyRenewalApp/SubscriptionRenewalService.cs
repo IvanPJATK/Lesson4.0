@@ -1,3 +1,4 @@
+using LegacyRenewalApp.Enums;
 using LegacyRenewalApp.Helper;
 using LegacyRenewalApp.Interfaves;
 using LegacyRenewalApp.Models;
@@ -8,16 +9,17 @@ namespace LegacyRenewalApp
 {
     public class SubscriptionRenewalService
     {
-        private readonly CustomerRepository _customerRepository;
-        private readonly SubscriptionPlanRepository _planRepository;
-        private readonly RenewalServiceValidator _renewalServiceValidator;
-        private readonly BillingGatewayAdapter _billingGatewayAdapter;
-        private readonly DiscountCalculator _discountCalculator;
-        private readonly FeeCalculator _feeCalculator;
+        private readonly ICustomerRepository _customerRepository;
+        private readonly ISubscriptionPlanRepository _planRepository;
+        private readonly IRenewalServiceValidator _renewalServiceValidator;
+        private readonly IBillingGateway _billingGatewayAdapter;
+        private readonly IDiscountCalculator _discountCalculator;
+        private readonly IFeeCalculator _feeCalculator;
+        private readonly ITaxCalculator _taxCalculator;
 
-        public SubscriptionRenewalService() : this(new CustomerRepository(), new SubscriptionPlanRepository(), new RenewalServiceValidator(), new BillingGatewayAdapter(), new DiscountCalculator(), new FeeCalculator())
+        public SubscriptionRenewalService() : this(new CustomerRepository(), new SubscriptionPlanRepository(), new RenewalServiceValidator(), new BillingGatewayAdapter(), new DiscountCalculator(), new FeeCalculator(), new TaxCalculator())
         { }
-        public SubscriptionRenewalService(CustomerRepository customerRepository, SubscriptionPlanRepository planRepository, RenewalServiceValidator renewalServiceValidator, BillingGatewayAdapter billingGatewayAdapter, DiscountCalculator discountCalculator, FeeCalculator feeCalculator)
+        public SubscriptionRenewalService(ICustomerRepository customerRepository, ISubscriptionPlanRepository planRepository, IRenewalServiceValidator renewalServiceValidator, IBillingGateway billingGatewayAdapter, IDiscountCalculator discountCalculator, IFeeCalculator feeCalculator, ITaxCalculator taxCalculator)
         {
             _customerRepository = customerRepository;
             _planRepository = planRepository;
@@ -25,6 +27,7 @@ namespace LegacyRenewalApp
             _billingGatewayAdapter = billingGatewayAdapter;
             _discountCalculator = discountCalculator;
             _feeCalculator = feeCalculator;
+            _taxCalculator = taxCalculator;
         }
         public RenewalInvoice CreateRenewalInvoice(
             int customerId,
@@ -42,46 +45,22 @@ namespace LegacyRenewalApp
             var customer = _customerRepository.GetById(customerId);
             var plan = _planRepository.GetByCode(normalizedPlanCode);
 
-            //here should be discount calculator
             DiscountResult discountResult = _discountCalculator.CalculateDiscount(customer, plan, customerId, normalizedPlanCode, normalizedPaymentMethod, seatCount, useLoyaltyPoints);
             decimal baseAmount = discountResult.BaseAmount;
             decimal discountAmount = discountResult.DiscountAmount;
             string notes = discountResult.Notes;
             decimal subtotalAfterDiscount = discountResult.SubtotalAfterDiscount;
 
-            FeeCalculatorResult feeCalculatorResult = _feeCalculator.CalculateFees(includePremiumSupport, normalizedPlanCode, normalizedPaymentMethod, subtotalAfterDiscount);
+            FeeCalculatorResult feeResult = _feeCalculator.CalculateFees(includePremiumSupport, normalizedPlanCode, normalizedPaymentMethod, subtotalAfterDiscount);
+            decimal supportFee = feeResult.SupportFee;
+            decimal paymentFee = feeResult.PaymentFee;
+            notes += feeResult.Notes;
 
-            decimal supportFee = feeCalculatorResult.SupportFee;
-            decimal paymentFee = feeCalculatorResult.PaymentFee;
-            notes += feeCalculatorResult.Notes;
-
-            decimal taxRate = 0.20m;
-            if (customer.Country == "Poland")
-            {
-                taxRate = 0.23m;
-            }
-            else if (customer.Country == "Germany")
-            {
-                taxRate = 0.19m;
-            }
-            else if (customer.Country == "Czech Republic")
-            {
-                taxRate = 0.21m;
-            }
-            else if (customer.Country == "Norway")
-            {
-                taxRate = 0.25m;
-            }
-
-            decimal taxBase = subtotalAfterDiscount + supportFee + paymentFee;
-            decimal taxAmount = taxBase * taxRate;
-            decimal finalAmount = taxBase + taxAmount;
-
-            if (finalAmount < 500m)
-            {
-                finalAmount = 500m;
-                notes += "minimum invoice amount applied; ";
-            }
+            TaxCalculatorResult taxCalculatorResult = _taxCalculator.calculateTax(customer.Country, subtotalAfterDiscount, supportFee, paymentFee); 
+            decimal taxBase = taxCalculatorResult.TaxBase;
+            decimal taxAmount = taxCalculatorResult.TaxAmount;
+            decimal finalAmount = taxCalculatorResult.FinalAmount;
+            notes += taxCalculatorResult.Notes;
 
             var invoice = new RenewalInvoice
             {
