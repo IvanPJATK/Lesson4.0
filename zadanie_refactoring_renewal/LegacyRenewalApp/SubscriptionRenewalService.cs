@@ -1,5 +1,6 @@
 using LegacyRenewalApp.Helper;
 using LegacyRenewalApp.Interfaves;
+using LegacyRenewalApp.Models;
 using LegacyRenewalApp.Repositories;
 using System;
 
@@ -7,18 +8,21 @@ namespace LegacyRenewalApp
 {
     public class SubscriptionRenewalService
     {
-        private readonly ICustomerRepository _customerRepository;
-        private readonly ISubscriptionPlanRepository _planRepository;
+        private readonly CustomerRepository _customerRepository;
+        private readonly SubscriptionPlanRepository _planRepository;
         private readonly RenewalServiceValidator _renewalServiceValidator;
-        private readonly BillingGatewayAdapter _billingGatewayAdapter = new BillingGatewayAdapter();
-        public SubscriptionRenewalService() : this(new CustomerRepository(), new SubscriptionPlanRepository(), new RenewalServiceValidator(), new BillingGatewayAdapter())
+        private readonly BillingGatewayAdapter _billingGatewayAdapter;
+        private readonly DiscountCalculator _discountCalculator;
+
+        public SubscriptionRenewalService() : this(new CustomerRepository(), new SubscriptionPlanRepository(), new RenewalServiceValidator(), new BillingGatewayAdapter(), new DiscountCalculator())
         { }
-        public SubscriptionRenewalService(ICustomerRepository customerRepository, ISubscriptionPlanRepository planRepository, RenewalServiceValidator renewalServiceValidator, BillingGatewayAdapter billingGatewayAdapter)
+        public SubscriptionRenewalService(CustomerRepository customerRepository, SubscriptionPlanRepository planRepository, RenewalServiceValidator renewalServiceValidator, BillingGatewayAdapter billingGatewayAdapter, DiscountCalculator discountCalculator)
         {
             _customerRepository = customerRepository;
             _planRepository = planRepository;
             _renewalServiceValidator = renewalServiceValidator;
             _billingGatewayAdapter = billingGatewayAdapter;
+            _discountCalculator = discountCalculator;
         }
         public RenewalInvoice CreateRenewalInvoice(
             int customerId,
@@ -36,76 +40,12 @@ namespace LegacyRenewalApp
             var customer = _customerRepository.GetById(customerId);
             var plan = _planRepository.GetByCode(normalizedPlanCode);
 
-            if (!customer.IsActive)
-            {
-                throw new InvalidOperationException("Inactive customers cannot renew subscriptions");
-            }
-
-            decimal baseAmount = (plan.MonthlyPricePerSeat * seatCount * 12m) + plan.SetupFee;
-            decimal discountAmount = 0m;
-            string notes = string.Empty;
-
-            if (customer.Segment == "Silver")
-            {
-                discountAmount += baseAmount * 0.05m;
-                notes += "silver discount; ";
-            }
-            else if (customer.Segment == "Gold")
-            {
-                discountAmount += baseAmount * 0.10m;
-                notes += "gold discount; ";
-            }
-            else if (customer.Segment == "Platinum")
-            {
-                discountAmount += baseAmount * 0.15m;
-                notes += "platinum discount; ";
-            }
-            else if (customer.Segment == "Education" && plan.IsEducationEligible)
-            {
-                discountAmount += baseAmount * 0.20m;
-                notes += "education discount; ";
-            }
-
-            if (customer.YearsWithCompany >= 5)
-            {
-                discountAmount += baseAmount * 0.07m;
-                notes += "long-term loyalty discount; ";
-            }
-            else if (customer.YearsWithCompany >= 2)
-            {
-                discountAmount += baseAmount * 0.03m;
-                notes += "basic loyalty discount; ";
-            }
-
-            if (seatCount >= 50)
-            {
-                discountAmount += baseAmount * 0.12m;
-                notes += "large team discount; ";
-            }
-            else if (seatCount >= 20)
-            {
-                discountAmount += baseAmount * 0.08m;
-                notes += "medium team discount; ";
-            }
-            else if (seatCount >= 10)
-            {
-                discountAmount += baseAmount * 0.04m;
-                notes += "small team discount; ";
-            }
-
-            if (useLoyaltyPoints && customer.LoyaltyPoints > 0)
-            {
-                int pointsToUse = customer.LoyaltyPoints > 200 ? 200 : customer.LoyaltyPoints;
-                discountAmount += pointsToUse;
-                notes += $"loyalty points used: {pointsToUse}; ";
-            }
-
-            decimal subtotalAfterDiscount = baseAmount - discountAmount;
-            if (subtotalAfterDiscount < 300m)
-            {
-                subtotalAfterDiscount = 300m;
-                notes += "minimum discounted subtotal applied; ";
-            }
+            //here should be discount calculator
+            DiscountResult discountResult = _discountCalculator.CalculateDiscount(customer, plan, customerId, normalizedPlanCode, normalizedPaymentMethod, seatCount, useLoyaltyPoints);
+            decimal baseAmount = discountResult.BaseAmount;
+            decimal discountAmount = discountResult.DiscountAmount;
+            string notes = discountResult.Notes;
+            decimal subtotalAfterDiscount = discountResult.SubtotalAfterDiscount;
 
             decimal supportFee = 0m;
             if (includePremiumSupport)
